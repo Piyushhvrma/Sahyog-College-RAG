@@ -1,0 +1,41 @@
+/* APPEND to frontend/src/styles2/HelpPages.css — new classes only (prefix .rag-), nothing existing is overridden.
+   Uses CSS variables with fallbacks so it adapts to your theme. */
+
+/* ---- Mode toggle (General / College Knowledge) ---- */
+.rag-mode { display: inline-flex; gap: 4px; padding: 4px; border-radius: 999px;
+  background: var(--surface-2, rgba(127,127,127,.12)); margin: 0 0 12px; }
+.rag-mode__btn { border: 0; background: transparent; padding: 6px 14px; border-radius: 999px; cursor: pointer;
+  font-size: .85rem; color: inherit; }
+.rag-mode__btn[aria-pressed="true"] { background: var(--primary, #2563eb); color: #fff; }
+.rag-mode__hint { font-size: .75rem; opacity: .7; margin: 0 0 8px; }
+
+/* ---- Source citations under an assistant message ---- */
+.rag-sources { margin-top: 8px; font-size: .8rem; }
+.rag-sources__toggle { border: 1px solid rgba(127,127,127,.35); background: transparent; color: inherit;
+  border-radius: 8px; padding: 3px 10px; cursor: pointer; }
+.rag-sources__list { margin: 8px 0 0; padding-left: 0; list-style: none; display: grid; gap: 6px; }
+.rag-sources__item { border-left: 3px solid var(--primary, #2563eb); padding: 4px 8px; background: rgba(127,127,127,.08);
+  border-radius: 0 6px 6px 0; }
+.rag-sources__tag { font-weight: 700; }
+.rag-sources__page { opacity: .75; }
+.rag-sources__snippet { opacity: .7; margin-top: 2px; font-size: .75rem; }
+
+/* ---- Admin knowledge panel ---- */
+.rag-admin { display: grid; gap: 12px; }
+.rag-admin__head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.rag-admin__stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
+.rag-admin__stat { display: flex; flex-direction: column; padding: 10px; border-radius: 10px;
+  background: rgba(127,127,127,.1); }
+.rag-admin__stat strong { font-size: 1.3rem; }
+.rag-admin__stat span { font-size: .75rem; opacity: .75; }
+.rag-admin__note, .rag-admin__sync, .rag-admin__count { font-size: .8rem; opacity: .8; margin: 0; }
+.rag-admin__error { background: #fee2e2; color: #991b1b; padding: 8px 12px; border-radius: 8px; }
+.rag-admin__filters { display: flex; gap: 8px; flex-wrap: wrap; }
+.rag-admin__tablewrap { overflow-x: auto; }
+.rag-admin__table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+.rag-admin__table th, .rag-admin__table td { text-align: left; padding: 8px; border-bottom: 1px solid rgba(127,127,127,.2); }
+.rag-badge { padding: 2px 8px; border-radius: 999px; font-size: .72rem; background: rgba(127,127,127,.2); }
+.rag-badge--indexed { background: #dcfce7; color: #166534; }
+.rag-badge--failed { background: #fee2e2; color: #991b1b; }
+.rag-badge--pending { background: #fef3c7; color: #92400e; }
+@media (max-width: 600px) { .rag-mode__btn { padding: 6px 10px; } }

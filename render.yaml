@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: sahyog-college-rag
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements-server.txt
+    startCommand: python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.12
+      - key: ENVIRONMENT
+        value: production
+      - key: MONGO_DB_NAME
+        value: sahyog_rag
+      - key: AUTO_APPROVE
+        value: "false"
+      - key: LINK_VISIBLE
+        value: "false"
+      - key: AUTO_SYNC_ENABLED
+        value: "false"
+      - key: VECTOR_SEARCH_ENABLED
+        value: "false"
+      - key: RAG_SERVICE_SECRET
+        sync: false
+      - key: MONGO_URI
+        sync: false
