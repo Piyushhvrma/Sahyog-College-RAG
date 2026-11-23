@@ -11,7 +11,7 @@ from app.vectorstore.mongo_client import CHUNKS
 
 log = logging.getLogger(__name__)
 
-SEARCH_FIELDS = ["text", "file_name", "document_name", "heading"]
+SEARCH_FIELDS = ["text", "file_name", "document_name", "heading", "subject"]
 
 
 def _normalized_phrase(value: str) -> str:

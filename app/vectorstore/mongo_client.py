@@ -56,6 +56,7 @@ def _ensure_text_fallback_index(chunks) -> None:
         ("file_name", TEXT),
         ("document_name", TEXT),
         ("heading", TEXT),
+        ("subject", TEXT),
     ]
     indexes = list(chunks.list_indexes())
     fallback = next((index for index in indexes if index.get("name") == "text_fallback"), None)
@@ -69,7 +70,7 @@ def _ensure_text_fallback_index(chunks) -> None:
         if not expected_fields.issubset(indexed_fields):
             log.warning(
                 "Existing text_fallback index has an outdated field mapping; "
-                "leaving it unchanged. Migrate it manually to include file_name."
+                "leaving it unchanged. Migrate it manually to include file_name and subject."
             )
         return
 
@@ -80,7 +81,7 @@ def _ensure_text_fallback_index(chunks) -> None:
     if existing_text_index:
         log.warning(
             "Existing MongoDB text index %s was not replaced; "
-            "verify its fields include file_name.",
+            "verify its fields include file_name and subject.",
             existing_text_index.get("name", "<unnamed>"),
         )
         return

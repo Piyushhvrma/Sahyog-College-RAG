@@ -11,7 +11,7 @@
 | Scanned PDF gives few/no chunks | Install Tesseract and set `TESSERACT_CMD` (INGESTION_GUIDE) |
 | `Got N-dim vector, expected 768` | `EMBEDDING_DIMENSIONS` doesn't match the model's output; keep 768 |
 | Gemini `429` | Free-tier limit; the embedder backs off automatically. Increase `EMBED_MIN_INTERVAL_S` or lower `EMBED_BATCH_SIZE` |
-| `/search` returns `count: 0` | Check approved chunk counts and `rag_text_index` readiness/mapping. Keyword search requires all query terms; verify `file_name`, `text`, and `heading` mappings. Inspect `keyword_engine` and fallback logs. |
+| `/search` returns `count: 0` | Check approved chunk counts and `rag_text_index` readiness/mapping. Keyword search requires all query terms; verify `file_name`, `text`, `heading`, and `subject` mappings. Inspect `keyword_engine` and fallback logs. |
 | `$vectorSearch` error / index not found | Create `rag_vector_index` (MONGODB_SETUP); wait for READY |
 | `keyword_engine: text_index` | Atlas Search failed or returned no hits; approved-only MongoDB text fallback was used. Check the Atlas mapping and `text_fallback` fields if fallback results differ. |
 | Mongo `ServerSelectionTimeoutError` | Add your IP in Atlas *Network Access*; check `MONGO_URI` |

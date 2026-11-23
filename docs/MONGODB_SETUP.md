@@ -32,6 +32,7 @@ Collection `rag_chunks`, index name **`rag_text_index`**:
       "file_name": { "type": "string", "analyzer": "lucene.standard" },
       "document_name": { "type": "string", "analyzer": "lucene.standard" },
       "heading": { "type": "string", "analyzer": "lucene.standard" },
+      "subject": { "type": "string", "analyzer": "lucene.standard" },
       "approved": { "type": "boolean" }
     }
   }
@@ -41,9 +42,9 @@ Wait for status **Active/READY** (≈1 minute). The keyword index is optional: w
 
 ### Existing index migration
 
-Existing index definitions are not updated, replaced, or dropped automatically. The application searches `text`, `file_name`, `document_name` (legacy), and `heading`, with `approved=true`. Preserve the existing analyzer and mapping options when migrating.
+Existing index definitions are not updated, replaced, or dropped automatically. The application searches `text`, `file_name`, `document_name` (legacy), `heading`, and `subject`, with `approved=true`. Preserve the existing analyzer and mapping options when migrating.
 
-For a no-downtime Atlas migration, create a second Atlas Search index named `rag_text_index_v2` on `sahyog_rag.rag_chunks` with the mapping above. Wait until it is `READY` and queryable. Test it in Atlas using a read-only aggregation that returns metadata only:
+For a no-downtime Atlas migration, create a second Atlas Search index named `rag_text_index_v2` on `sahyog_rag.rag_chunks` with the mapping above. This is required when the existing `rag_text_index` is READY but has `dynamic: false` and does not map `subject`. Wait until the new index is `READY` and queryable. Test it in Atlas using a read-only aggregation that returns metadata only:
 
 ```javascript
 db.rag_chunks.aggregate([
@@ -54,7 +55,7 @@ db.rag_chunks.aggregate([
         must: [{
           text: {
             query: "Applied Chemistry",
-            path: ["text", "file_name", "document_name", "heading"]
+            path: ["text", "file_name", "document_name", "heading", "subject"]
           }
         }],
         filter: [{ equals: { path: "approved", value: true } }]
@@ -82,7 +83,7 @@ To inspect ordinary MongoDB indexes without changing them:
 db.rag_chunks.getIndexes()
 ```
 
-Check the `text_fallback` index's `weights` for `text`, `file_name`, and `document_name` (some MongoDB versions show the text key as internal `_fts` fields). The diagnostic script also prints normal index names/keys and field names without chunk contents:
+Check the `text_fallback` index's `weights` for `text`, `file_name`, `document_name`, `heading`, and `subject` (some MongoDB versions show the text key as internal `_fts` fields). The diagnostic script also prints normal index names/keys and field names without chunk contents:
 
 ```powershell
 python -m scripts.diagnose_search
@@ -93,7 +94,7 @@ MongoDB permits only one text index per collection. If `text_fallback` already e
 ```javascript
 db.rag_chunks.dropIndex("text_fallback")
 db.rag_chunks.createIndex(
-  { text: "text", file_name: "text", document_name: "text", heading: "text" },
+  { text: "text", file_name: "text", document_name: "text", heading: "text", subject: "text" },
   { name: "text_fallback", default_language: "none" }
 )
 ```

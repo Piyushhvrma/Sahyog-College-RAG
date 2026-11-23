@@ -29,6 +29,7 @@ class AtlasFixtureCollection:
     def aggregate(self, pipeline):
         compound = pipeline[0]["$search"]["compound"]
         text_query = compound["must"][0]["text"]
+        assert text_query["path"] == keyword_search_module.SEARCH_FIELDS
         assert text_query["matchCriteria"] == "all"
         assert compound["filter"] == [{"equals": {"path": "approved", "value": True}}]
         assert any(
@@ -45,7 +46,7 @@ class AtlasFixtureCollection:
                 continue
             searchable = " ".join(
                 str(chunk.get(field) or "")
-                for field in ("text", "file_name", "document_name", "heading")
+                for field in ("text", "file_name", "document_name", "heading", "subject")
             ).casefold()
             if not all(term in searchable for term in terms):
                 continue
@@ -82,7 +83,13 @@ class AtlasFixtureDatabase:
 
 def _approved_text_index(db):
     db[CHUNKS].create_index(
-        [("text", TEXT), ("file_name", TEXT), ("document_name", TEXT), ("heading", TEXT)],
+        [
+            ("text", TEXT),
+            ("file_name", TEXT),
+            ("document_name", TEXT),
+            ("heading", TEXT),
+            ("subject", TEXT),
+        ],
         name="text_fallback",
         default_language="none",
     )
@@ -110,6 +117,8 @@ def _disable_atlas_search(monkeypatch):
                     + document.get("document_name", "")
                     + " "
                     + document.get("heading", "")
+                    + " "
+                    + document.get("subject", "")
                 ).casefold()
                 for term in terms
             )
@@ -172,7 +181,9 @@ def test_atlas_keyword_search_includes_filename_and_approved_filter():
             assert pipeline[0]["$search"]["index"] == "rag_text_index_v2"
             search = pipeline[0]["$search"]["compound"]
             text_query = search["must"][0]["text"]
-            assert text_query["path"] == ["text", "file_name", "document_name", "heading"]
+            assert text_query["path"] == [
+                "text", "file_name", "document_name", "heading", "subject"
+            ]
             assert text_query["matchCriteria"] == "all"
             assert any(
                 clause.get("phrase", {}).get("path") == "file_name"
@@ -204,6 +215,7 @@ def test_atlas_keyword_search_includes_filename_and_approved_filter():
         ("file_name", "filenamephrase"),
         ("document_name", "legacyphrase"),
         ("heading", "headingphrase"),
+        ("subject", "subjectphrase"),
     ],
 )
 def test_text_fallback_searches_supported_fields_and_only_approved_chunks(
@@ -219,6 +231,7 @@ def test_text_fallback_searches_supported_fields_and_only_approved_chunks(
             "file_name": "ordinary.pdf",
             "document_name": "ordinary legacy name",
             "heading": "ordinary heading",
+            "subject": "ordinary subject",
             "approved": approved,
         }
         row[field] = f"{query} source"
@@ -309,6 +322,71 @@ def test_atlas_multiword_precision_and_approved_results(query, expected_ids):
 
     assert engine == "atlas_search"
     assert [row["_id"] for row in results] == expected_ids
+
+
+def test_atlas_search_finds_subject_only_chunks_and_excludes_unapproved():
+    chunks = [
+        {
+            "_id": "approved-subject",
+            "file_name": "DS U4.pdf",
+            "text": "Trees, graphs, and algorithms.",
+            "heading": "Unit Four",
+            "subject": "Data Structures",
+            "approved": True,
+        },
+        {
+            "_id": "unapproved-subject",
+            "file_name": "DS U4 pending.pdf",
+            "text": "Trees, graphs, and algorithms.",
+            "heading": "Unit Four",
+            "subject": "Data Structures",
+            "approved": False,
+        },
+    ]
+
+    results, engine = keyword_search_module.keyword_search(
+        AtlasFixtureDatabase(chunks),
+        "Data Structures",
+        filters={"approved": False},
+    )
+
+    assert engine == "atlas_search"
+    assert [row["_id"] for row in results] == ["approved-subject"]
+
+
+def test_text_fallback_finds_subject_only_chunks_and_excludes_unapproved(monkeypatch):
+    db = mongomock.MongoClient()["text-subject-search"]
+    _approved_text_index(db)
+    db[CHUNKS].insert_many(
+        [
+            {
+                "_id": "approved-subject",
+                "file_name": "DS U4.pdf",
+                "text": "Trees, graphs, and algorithms.",
+                "document_name": "DS U4.pdf",
+                "heading": "Unit Four",
+                "subject": "Data Structures",
+                "approved": True,
+            },
+            {
+                "_id": "unapproved-subject",
+                "file_name": "DS U4 pending.pdf",
+                "text": "Trees, graphs, and algorithms.",
+                "document_name": "DS U4 pending.pdf",
+                "heading": "Unit Four",
+                "subject": "Data Structures",
+                "approved": False,
+            },
+        ]
+    )
+    _disable_atlas_search(monkeypatch)
+
+    results, engine = keyword_search_module.keyword_search(
+        db, "Data Structures", filters={"approved": False}
+    )
+
+    assert engine == "text_index"
+    assert [row["_id"] for row in results] == ["approved-subject"]
 
 
 def test_atlas_prioritizes_exact_filename_phrase():
@@ -414,9 +492,13 @@ def test_text_index_definition_includes_current_and_legacy_filename_fields():
     assert fields["file_name"]["type"] == "string"
     assert fields["document_name"]["type"] == "string"
     assert fields["heading"]["type"] == "string"
+    assert fields["subject"] == {
+        "type": "string",
+        "analyzer": "lucene.standard",
+    }
 
 
-def test_existing_atlas_indexes_are_not_replaced_for_filename_migration(monkeypatch):
+def test_existing_atlas_indexes_are_not_replaced_for_subject_migration(monkeypatch):
     monkeypatch.setattr(
         index_manager,
         "list_search_indexes",
@@ -433,7 +515,22 @@ def test_existing_atlas_indexes_are_not_replaced_for_filename_migration(monkeypa
     report = index_manager.create_search_indexes(Database())
 
     assert "not modified" in report[index_manager.TEXT_INDEX_NAME]
-    assert "file_name" in report[index_manager.TEXT_INDEX_NAME]
+    assert "subject" in report[index_manager.TEXT_INDEX_NAME]
+
+
+def test_init_collections_creates_text_fallback_index_with_subject():
+    db = mongomock.MongoClient()["text-index-with-subject"]
+
+    mongo_client.init_collections(db)
+
+    key = db[CHUNKS].index_information()["text_fallback"]["key"]
+    assert key == [
+        ("text", TEXT),
+        ("file_name", TEXT),
+        ("document_name", TEXT),
+        ("heading", TEXT),
+        ("subject", TEXT),
+    ]
 
 
 def test_init_collections_preserves_legacy_text_fallback_index(caplog):

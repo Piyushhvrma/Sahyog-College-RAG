@@ -34,6 +34,7 @@ def text_index_definition() -> dict:
                 "file_name": {"type": "string", "analyzer": "lucene.standard"},
                 "document_name": {"type": "string", "analyzer": "lucene.standard"},
                 "heading": {"type": "string", "analyzer": "lucene.standard"},
+                "subject": {"type": "string", "analyzer": "lucene.standard"},
                 "approved": {"type": "boolean"},
             },
         }
@@ -59,7 +60,10 @@ def create_search_indexes(db: Database, dimensions: int = 768,
     for name, typ, definition in wanted:
         if name in existing:
             if name == text_index_name:
-                report[name] = "already exists; verify mapping includes file_name (existing index not modified)"
+                report[name] = (
+                    "already exists; verify mapping includes file_name and subject "
+                    "(existing index not modified)"
+                )
             else:
                 report[name] = "already exists"
             continue
