@@ -1,5 +1,6 @@
 """Keyword search: Atlas Search ($search) when its index exists, else a standard $text index."""
 import logging
+import re
 from typing import Any
 
 from pymongo.database import Database
@@ -10,14 +11,65 @@ from app.vectorstore.mongo_client import CHUNKS
 
 log = logging.getLogger(__name__)
 
+SEARCH_FIELDS = ["text", "file_name", "document_name", "heading"]
 
-def _atlas_search(db: Database, query: str, limit: int, filters: dict[str, Any]) -> list[dict]:
+
+def _normalized_phrase(value: str) -> str:
+    return " ".join(re.findall(r"[\w]+", value.casefold(), flags=re.UNICODE))
+
+
+def _text_search_phrase(query: str) -> str:
+    terms = re.findall(r"[\w]+", query, flags=re.UNICODE)
+    phrase = " ".join(terms)
+    if len(terms) > 1:
+        return f'"{phrase}"'
+    return phrase or query
+
+
+def _atlas_search(db: Database, query: str, limit: int, filters: dict[str, Any],
+                  index_name: str = TEXT_INDEX_NAME) -> list[dict]:
     pipeline: list[dict] = [
         {"$search": {
-            "index": TEXT_INDEX_NAME,
+            "index": index_name,
             "compound": {
-                "must": [{"text": {"query": query, "path": ["text", "document_name", "heading"],
-                                   "score": {"boost": {"value": 1}}}}],
+                "must": [{
+                    "text": {
+                        "query": query,
+                        "path": SEARCH_FIELDS,
+                        "matchCriteria": "all",
+                        "score": {"boost": {"value": 1}},
+                    }
+                }],
+                "should": [
+                    {
+                        "phrase": {
+                            "query": query,
+                            "path": "file_name",
+                            "score": {"boost": {"value": 20}},
+                        }
+                    },
+                    {
+                        "phrase": {
+                            "query": query,
+                            "path": "document_name",
+                            "score": {"boost": {"value": 16}},
+                        }
+                    },
+                    {
+                        "phrase": {
+                            "query": query,
+                            "path": "text",
+                            "score": {"boost": {"value": 5}},
+                        }
+                    },
+                    {
+                        "phrase": {
+                            "query": query,
+                            "path": "heading",
+                            "score": {"boost": {"value": 4}},
+                        }
+                    },
+                ],
                 "filter": [{"equals": {"path": "approved", "value": True}}],
             },
         }},
@@ -32,20 +84,60 @@ def _atlas_search(db: Database, query: str, limit: int, filters: dict[str, Any])
 
 
 def _text_fallback(db: Database, query: str, limit: int, filters: dict[str, Any]) -> list[dict]:
-    q = {"$text": {"$search": query}, **filters}
+    q = {"$text": {"$search": _text_search_phrase(query)}, **filters}
     cur = (db[CHUNKS].find(q, {"embedding": 0, "_kscore": {"$meta": "textScore"}})
            .sort([("_kscore", {"$meta": "textScore"})]).limit(limit))
-    return list(cur)
+    results = list(cur)
+    phrase = _normalized_phrase(query)
+    if phrase:
+        results.sort(
+            key=lambda result: phrase in _normalized_phrase(
+                result.get("file_name") or result.get("document_name") or ""
+            ),
+            reverse=True,
+        )
+    return results
 
 
 def keyword_search(db: Database, query: str, limit: int = 20,
-                   filters: dict[str, Any] | None = None) -> tuple[list[dict], str]:
+                   filters: dict[str, Any] | None = None,
+                   index_name: str = TEXT_INDEX_NAME) -> tuple[list[dict], str]:
     """Returns (results, engine_used)."""
     filters = dict(filters or {})
     filters["approved"] = True
+    atlas_failed = False
     try:
-        res = _atlas_search(db, query, limit, filters)
-        return res, "atlas_search"
+        atlas_results = _atlas_search(db, query, limit, filters, index_name=index_name)
     except OperationFailure as exc:
-        log.info("Atlas Search unavailable (%s); using $text fallback.", str(exc)[:80])
-    return _text_fallback(db, query, limit, filters), "text_index"
+        atlas_failed = True
+        log.warning(
+            "Atlas Search failed (%s); trying the approved-only MongoDB text index.",
+            type(exc).__name__,
+        )
+    else:
+        if atlas_results:
+            return atlas_results, "atlas_search"
+        log.info(
+            "Atlas Search returned zero hits; trying the approved-only MongoDB text index."
+        )
+
+    try:
+        text_results = _text_fallback(db, query, limit, filters)
+    except OperationFailure as exc:
+        log.error(
+            "MongoDB text fallback failed (%s); verify the text_fallback index.",
+            type(exc).__name__,
+        )
+        raise
+
+    if atlas_failed:
+        log.warning("MongoDB text fallback returned %d hits.", len(text_results))
+    elif text_results:
+        log.warning(
+            "Atlas Search returned zero hits but MongoDB text fallback found %d; "
+            "the Atlas Search index may be stale or missing field mappings.",
+            len(text_results),
+        )
+    else:
+        log.info("Both Atlas Search and MongoDB text fallback returned zero hits.")
+    return text_results, "text_index"

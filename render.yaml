@@ -21,6 +21,8 @@ services:
         value: "false"
       - key: VECTOR_SEARCH_ENABLED
         value: "false"
+      - key: RAG_TEXT_SEARCH_INDEX_NAME
+        value: rag_text_index
       - key: RAG_SERVICE_SECRET
         sync: false
       - key: MONGO_URI

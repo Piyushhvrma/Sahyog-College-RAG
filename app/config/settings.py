@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     chunk_overlap_tokens: int = Field(default=100, ge=0)
 
     search_top_k: int = Field(default=5, ge=1, le=10)
+    rag_text_search_index_name: str = "rag_text_index"
     vector_search_enabled: bool = True
     link_visible: bool = False
     auto_approve: bool = False

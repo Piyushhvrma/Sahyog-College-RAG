@@ -38,7 +38,9 @@ Response:
 * Only **approved** chunks are searched. `source_url` is `null` unless `LINK_VISIBLE=true`.
 * `score` is the fused RRF score (relative ranking only; not a probability).
 * Optional filters include `branch`, `semester`, `subject`, `academic_year`, and `doc_type`. Metadata is conservative: unavailable values remain absent rather than being inferred without evidence.
-* With `VECTOR_SEARCH_ENABLED=false`, retrieval uses approved-only keyword results, skips Gemini query embeddings, and reports `"fusion":"keyword_only"`; it falls back to the ordinary `text_fallback` index if the Atlas Search index is unavailable.
+* Keyword text matching requires all query terms across `text`, `file_name`, legacy `document_name`, and `heading`. Exact filename and phrase matches receive ranking boosts. All keyword paths retain the `approved=true` filter.
+* If Atlas Search fails or returns no hits, retrieval tries the approved-only ordinary `text_fallback` index. Multi-word fallback queries use phrase matching and exact filename matches are prioritized. A successful fallback reports `"keyword_engine":"text_index"` rather than implying Atlas returned hits.
+* With `VECTOR_SEARCH_ENABLED=false`, retrieval skips Gemini query embeddings and reports `"fusion":"keyword_only"`.
 * Errors: 422 invalid body · 429 Gemini rate/daily quota limit (optional bounded `Retry-After`) · 502 embedding provider failed · 503 Mongo unavailable or no approved chunks · 500 unexpected search failure.
 
 ## PATCH /documents/{file_id}/approval

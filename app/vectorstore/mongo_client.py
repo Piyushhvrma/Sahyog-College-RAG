@@ -50,6 +50,44 @@ def get_db(settings: Settings | None = None) -> Database:
     return _client(s.mongo_uri)[s.mongo_db_name]
 
 
+def _ensure_text_fallback_index(chunks) -> None:
+    expected_keys = [
+        ("text", TEXT),
+        ("file_name", TEXT),
+        ("document_name", TEXT),
+        ("heading", TEXT),
+    ]
+    indexes = list(chunks.list_indexes())
+    fallback = next((index for index in indexes if index.get("name") == "text_fallback"), None)
+    if fallback:
+        indexed_fields = set(fallback.get("weights", {}))
+        if not indexed_fields:
+            indexed_fields = {
+                field for field, kind in fallback.get("key", {}).items() if kind == TEXT
+            }
+        expected_fields = {field for field, _ in expected_keys}
+        if not expected_fields.issubset(indexed_fields):
+            log.warning(
+                "Existing text_fallback index has an outdated field mapping; "
+                "leaving it unchanged. Migrate it manually to include file_name."
+            )
+        return
+
+    existing_text_index = next(
+        (index for index in indexes if TEXT in index.get("key", {}).values()),
+        None,
+    )
+    if existing_text_index:
+        log.warning(
+            "Existing MongoDB text index %s was not replaced; "
+            "verify its fields include file_name.",
+            existing_text_index.get("name", "<unnamed>"),
+        )
+        return
+
+    chunks.create_index(expected_keys, name="text_fallback", default_language="none")
+
+
 def init_collections(db: Database) -> None:
     """Idempotent. Creates collections and ordinary (non-Atlas-Search) indexes."""
     existing = set(db.list_collection_names())
@@ -61,8 +99,7 @@ def init_collections(db: Database) -> None:
     db[DOCUMENTS].create_index([("doc_hash", ASCENDING)], name="doc_hash")
     db[CHUNKS].create_index([("document_id", ASCENDING), ("version", ASCENDING)], name="doc_version")
     db[CHUNKS].create_index([("content_hash", ASCENDING)], name="content_hash")
-    # Fallback keyword index that works on every tier (used if Atlas Search index is absent).
-    db[CHUNKS].create_index([("text", TEXT), ("document_name", TEXT)], name="text_fallback",
-                            default_language="none")
+    # Do not replace an existing text index implicitly; MongoDB permits only one per collection.
+    _ensure_text_fallback_index(db[CHUNKS])
     db[SYNC_LOGS].create_index([("started_at", ASCENDING)], name="started_at")
     db[INACCESSIBLE_ITEMS].create_index([("id", ASCENDING)], name="inaccessible_id")

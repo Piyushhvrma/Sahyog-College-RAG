@@ -83,7 +83,13 @@ def hybrid_search(db: Database, embedder: GeminiEmbedder, query: str, top_k: int
     flt["approved"] = True
     candidates = max(top_k * 4, 20)
 
-    kw_results, kw_engine = keyword_search(db, rewritten, limit=candidates, filters=flt)
+    kw_results, kw_engine = keyword_search(
+        db,
+        rewritten,
+        limit=candidates,
+        filters=flt,
+        index_name=settings.rag_text_search_index_name,
+    )
     if settings.vector_search_enabled:
         qvec = embedder.embed_query(rewritten)
         vec_results = vector_search(db, qvec, limit=candidates, filters=flt)

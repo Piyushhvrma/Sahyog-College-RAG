@@ -31,6 +31,7 @@ def text_index_definition() -> dict:
             "dynamic": False,
             "fields": {
                 "text": {"type": "string", "analyzer": "lucene.standard"},
+                "file_name": {"type": "string", "analyzer": "lucene.standard"},
                 "document_name": {"type": "string", "analyzer": "lucene.standard"},
                 "heading": {"type": "string", "analyzer": "lucene.standard"},
                 "approved": {"type": "boolean"},
@@ -47,16 +48,20 @@ def list_search_indexes(db: Database) -> dict[str, dict]:
         return {}
 
 
-def create_search_indexes(db: Database, dimensions: int = 768) -> dict[str, str]:
+def create_search_indexes(db: Database, dimensions: int = 768,
+                          text_index_name: str = TEXT_INDEX_NAME) -> dict[str, str]:
     existing = list_search_indexes(db)
     report: dict[str, str] = {}
     wanted = [
         (VECTOR_INDEX_NAME, "vectorSearch", vector_index_definition(dimensions)),
-        (TEXT_INDEX_NAME, "search", text_index_definition()),
+        (text_index_name, "search", text_index_definition()),
     ]
     for name, typ, definition in wanted:
         if name in existing:
-            report[name] = "already exists"
+            if name == text_index_name:
+                report[name] = "already exists; verify mapping includes file_name (existing index not modified)"
+            else:
+                report[name] = "already exists"
             continue
         try:
             db[CHUNKS].create_search_index(SearchIndexModel(definition=definition, name=name, type=typ))

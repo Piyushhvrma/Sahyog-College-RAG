@@ -20,7 +20,7 @@ This list reflects the source tree after adding local-folder/ZIP ingestion, loca
 - `scripts/__init__.py`, `scripts/_common.py`
 - `scripts/check_local_setup.py`, `scripts/extract_documents.py`, `scripts/ingest.py`, `scripts/ingest_local.py`
 - `scripts/inspect_chunks.py`, `scripts/local_smoke_test.py`, `scripts/reindex.py`
-- `scripts/scan_drive.py`, `scripts/scan_local.py`, `scripts/setup_mongo.py`, `scripts/sync_drive.py`
+- `scripts/diagnose_search.py`, `scripts/scan_drive.py`, `scripts/scan_local.py`, `scripts/setup_mongo.py`, `scripts/sync_drive.py`
 - `scripts/test_drive.py`, `scripts/test_embeddings.py`, `scripts/test_retrieval.py`
 - `tests/__init__.py`, `tests/conftest.py`
 - `tests/test_chunker.py`, `tests/test_config_files.py`, `tests/test_drive_client.py`, `tests/test_embedder.py`

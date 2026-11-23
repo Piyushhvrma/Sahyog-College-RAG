@@ -6,7 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 REQUIRED = ["ENVIRONMENT", "LOG_LEVEL", "RAG_SERVICE_SECRET", "MONGO_URI", "MONGO_DB_NAME", "GEMINI_API_KEY",
             "EMBEDDING_MODEL", "EMBEDDING_DIMENSIONS", "GOOGLE_CREDENTIALS_PATH", "GOOGLE_TOKEN_PATH",
             "DRIVE_ROOT_FOLDER_ID", "LOCAL_KNOWLEDGE_DIR", "MAX_DOWNLOAD_MB", "TESSERACT_CMD", "CHUNK_TARGET_TOKENS",
-            "CHUNK_OVERLAP_TOKENS", "VECTOR_SEARCH_ENABLED"]
+            "CHUNK_OVERLAP_TOKENS", "VECTOR_SEARCH_ENABLED", "RAG_TEXT_SEARCH_INDEX_NAME"]
 
 
 def env_pairs():
@@ -59,7 +59,8 @@ def test_required_files_exist_and_not_empty():
     .vscode/tasks.json .vscode/launch.json
     render.yaml .github/workflows/python-tests.yml ZIP_MANIFEST.md
     tests/test_local_ingestion.py tests/test_local_workflow.py tests/test_mongo_client.py
-    tests/test_search_modes.py
+    tests/test_search_modes.py tests/test_search_diagnostics.py
+    scripts/diagnose_search.py
     docs/ARCHITECTURE.md docs/GOOGLE_DRIVE_SETUP.md docs/MONGODB_SETUP.md docs/INGESTION_GUIDE.md
     docs/API_REFERENCE.md docs/SAHYOG_INTEGRATION.md docs/TROUBLESHOOTING.md docs/DEPLOYMENT.md
     integration/backend-aiRoutes.integration.md integration/backend-env.integration.md

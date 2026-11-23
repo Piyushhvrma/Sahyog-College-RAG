@@ -10,6 +10,13 @@ def test_defaults_match_spec():
     assert s.chunk_target_tokens == 800 and s.chunk_overlap_tokens == 100
     assert s.link_visible is False
     assert s.vector_search_enabled is True
+    assert s.rag_text_search_index_name == "rag_text_index"
+
+
+def test_text_search_index_name_is_configurable(monkeypatch):
+    monkeypatch.setenv("RAG_TEXT_SEARCH_INDEX_NAME", "rag_text_index_v2")
+    settings = Settings(_env_file=None)
+    assert settings.rag_text_search_index_name == "rag_text_index_v2"
 
 
 def test_approval_and_schedule_are_safe_by_default(monkeypatch):
