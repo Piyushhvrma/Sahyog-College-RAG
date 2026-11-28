@@ -13,6 +13,31 @@ log = logging.getLogger(__name__)
 
 SEARCH_FIELDS = ["text", "file_name", "document_name", "heading", "subject"]
 
+# Conversational filler (English + Hinglish). Atlas Search uses matchCriteria "all" for
+# precision, so a word like "batao" that never appears in a document would otherwise make
+# "Data Structures ke important topics batao" return zero hits.
+FILLER_TERMS = frozenset({
+    # Hinglish
+    "ke", "ki", "ka", "ko", "se", "mein", "mai", "hai", "hain", "ho", "kya", "kaun",
+    "kaunse", "konse", "kon", "batao", "bata", "btao", "bataiye", "bataye", "bataao",
+    "samjhao", "samjha", "samjhaiye", "chahiye", "chaiye", "dedo", "de", "dijiye", "do",
+    "karo", "kar", "kr", "aur", "bhi", "wala", "wale", "wali", "ye", "yeh", "woh", "vo",
+    "mujhe", "muje", "hume", "humko", "zara", "thoda", "sab", "saare", "sare",
+    # English
+    "please", "pls", "plz", "tell", "about", "what", "which", "are", "is", "the", "an",
+    "of", "for", "give", "show", "list", "explain", "important", "imp", "topic", "topics",
+    "some", "all", "can", "could", "you", "need", "want", "on", "to", "and", "my", "us",
+})
+
+
+def keyword_query(query: str) -> str:
+    """Drop conversational filler so all-terms matching keys on subject/content words.
+
+    Returns the original query if nothing meaningful would remain."""
+    terms = re.findall(r"[\w]+", query, flags=re.UNICODE)
+    kept = [term for term in terms if term.casefold() not in FILLER_TERMS]
+    return " ".join(kept) if kept else query
+
 
 def _normalized_phrase(value: str) -> str:
     return " ".join(re.findall(r"[\w]+", value.casefold(), flags=re.UNICODE))
@@ -105,6 +130,7 @@ def keyword_search(db: Database, query: str, limit: int = 20,
     """Returns (results, engine_used)."""
     filters = dict(filters or {})
     filters["approved"] = True
+    query = keyword_query(query)
     atlas_failed = False
     try:
         atlas_results = _atlas_search(db, query, limit, filters, index_name=index_name)

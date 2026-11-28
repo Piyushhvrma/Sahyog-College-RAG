@@ -661,3 +661,59 @@ def test_admin_approval_enables_keyword_search_in_isolated_database(monkeypatch)
         "Attendance Guide.pdf"
     ]
     assert search.json()["retrieval"]["fusion"] == "keyword_only"
+
+
+@pytest.mark.parametrize(
+    ("query", "expected"),
+    [
+        ("Data Structures ke important topics batao", "Data Structures"),
+        ("Maths II ke first year PYQ batao", "Maths II first year PYQ"),
+        ("DBMS kya hai", "DBMS"),
+        ("ME branch syllabus", "ME branch syllabus"),
+        ("batao", "batao"),
+    ],
+)
+def test_keyword_query_drops_conversational_filler(query, expected):
+    assert keyword_search_module.keyword_query(query) == expected
+
+
+def test_atlas_finds_hinglish_subject_query_with_all_terms_precision(monkeypatch):
+    chunks = _precision_fixtures() + [
+        {
+            "_id": "ds-u4",
+            "document_id": "ds-u4-doc",
+            "file_name": "DS U4.pdf",
+            "text": "Graph Traversal",
+            "subject": "Data Structures",
+            "page_number": 8,
+            "approved": True,
+        },
+    ]
+    monkeypatch.setattr(
+        keyword_search_module,
+        "_text_fallback",
+        lambda *_args, **_kwargs: pytest.fail("Atlas hits must not need the text fallback"),
+    )
+
+    results, engine = keyword_search_module.keyword_search(
+        AtlasFixtureDatabase(chunks),
+        "Data Structures ke important topics batao",
+    )
+
+    assert engine == "atlas_search"
+    assert {row["_id"] for row in results} == {"data-structures", "ds-u4"}
+    assert "chemistry" not in {row["_id"] for row in results}
+
+
+def test_text_fallback_receives_filler_free_query(monkeypatch):
+    monkeypatch.setattr(keyword_search_module, "_atlas_search", lambda *_args, **_kwargs: [])
+    observed = {}
+
+    def fallback(_db, query, _limit, _filters):
+        observed["query"] = query
+        return []
+
+    monkeypatch.setattr(keyword_search_module, "_text_fallback", fallback)
+    keyword_search_module.keyword_search(None, "Data Structures ke important topics batao")
+
+    assert observed["query"] == "Data Structures"
