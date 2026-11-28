@@ -58,6 +58,48 @@ def dedupe(results: list[dict], max_per_doc: int = MAX_PER_DOC) -> list[dict]:
     return out
 
 
+def select_results(results: list[dict], top_k: int, max_per_doc: int = MAX_PER_DOC) -> list[dict]:
+    """Diverse-first selection that backfills to top_k.
+
+    The per-document cap keeps one document from crowding out others, but when few documents
+    match (e.g. a subject with a single approved notes file) the cap alone discarded relevant
+    chunks: 9 keyword hits from DS U4.pdf became 3 results. Remaining ranked, non-duplicate
+    chunks now fill the leftover slots."""
+    selected = dedupe(results, max_per_doc)[:top_k]
+    if len(selected) < top_k:
+        chosen = {id(r) for r in selected}
+        seen_hash = {r.get("content_hash") for r in selected if r.get("content_hash")}
+        for r in results:
+            if len(selected) >= top_k:
+                break
+            h = r.get("content_hash")
+            if id(r) in chosen or (h and h in seen_hash):
+                continue
+            if h:
+                seen_hash.add(h)
+            selected.append(r)
+    return selected
+
+
+def order_for_reading(results: list[dict]) -> list[dict]:
+    """Group the selected chunks by document (best-ranked document first) and keep each
+    document's chunks in page/chunk order, so passages read like the original notes."""
+    doc_rank: dict[str, int] = {}
+    for position, r in enumerate(results):
+        doc_rank.setdefault(r.get("document_id", ""), position)
+
+    def key(r: dict) -> tuple:
+        page = r.get("page_number")
+        index = r.get("chunk_index")
+        return (
+            doc_rank[r.get("document_id", "")],
+            page if isinstance(page, int) else float("inf"),
+            index if isinstance(index, int) else float("inf"),
+        )
+
+    return sorted(results, key=key)
+
+
 def to_source(r: dict, link_visible: bool) -> dict:
     meta_keys = ("branch", "semester", "subject", "subject_code", "academic_year", "doc_type",
                  "study_year", "unit", "chapter", "folder_path", "source_path", "source_type",
@@ -100,7 +142,7 @@ def hybrid_search(db: Database, embedder: GeminiEmbedder, query: str, top_k: int
         fused = rrf_fuse([kw_results], k=60)
         fusion = "keyword_only"
     fused = apply_boosts(fused, query_hints(query))
-    final = dedupe(fused)[:top_k]
+    final = order_for_reading(select_results(fused, top_k))
     return {
         "query": query,
         "rewritten_query": rewritten,

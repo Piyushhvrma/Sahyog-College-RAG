@@ -717,3 +717,107 @@ def test_text_fallback_receives_filler_free_query(monkeypatch):
     keyword_search_module.keyword_search(None, "Data Structures ke important topics batao")
 
     assert observed["query"] == "Data Structures"
+
+
+# Mirrors the production DS U4.pdf chunks: nine short topic headings, subject metadata only.
+DS_U4_PAGES = [
+    (1, "Trees Binary Tree"),
+    (2, "Expression Tree"),
+    (3, "Array Representation of Binary Tree"),
+    (4, "Linked List Representation of Binary Tree Tree Traversal"),
+    (5, "Binary Search Tree"),
+    (6, "Graphs Sequential Representation"),
+    (8, "Graph Traversal"),
+    (9, "Hashing"),
+    (11, "Value stores at next free slot."),
+]
+
+
+def _ds_u4_chunks():
+    # Stored out of page order to prove the final ordering is not an accident of insertion.
+    order = [8, 0, 6, 3, 1, 7, 5, 2, 4]
+    return [
+        {
+            "_id": f"ds-{index}",
+            "document_id": "ds-u4-doc",
+            "file_name": "DS U4.pdf",
+            "text": DS_U4_PAGES[index][1],
+            "page_number": DS_U4_PAGES[index][0],
+            "chunk_index": index,
+            "content_hash": f"ds-hash-{index}",
+            "subject": "Data Structures",
+            "study_year": 1,
+            "approved": True,
+        }
+        for index in order
+    ]
+
+
+def _hybrid(db, query, top_k):
+    return hybrid_search_module.hybrid_search(
+        db,
+        NoQueryEmbedding(),
+        query,
+        top_k=top_k,
+        settings=Settings(
+            _env_file=None,
+            vector_search_enabled=False,
+            rag_text_search_index_name="rag_text_index_v2",
+        ),
+    )
+
+
+def test_hinglish_subject_query_returns_all_relevant_chunks_from_single_document():
+    chunks = _ds_u4_chunks() + _precision_fixtures() + [
+        dict(_ds_u4_chunks()[0], _id="ds-unapproved", approved=False, content_hash="x"),
+    ]
+    result = _hybrid(
+        AtlasFixtureDatabase(chunks), "Data Structures ke important topics batao", top_k=10
+    )
+
+    ids = [row["chunk_id"] for row in result["results"]]
+    assert result["retrieval"]["keyword_engine"] == "atlas_search"
+    assert result["retrieval"]["keyword_hits"] == 10
+    # Previously the per-document cap kept only 3 of the 9 approved DS U4 chunks.
+    assert len(ids) == 10
+    assert "ds-unapproved" not in ids
+    assert not {"chemistry", "maths", "orsat-chemistry"} & set(ids)
+    # The exact filename phrase match ranks its document first; DS U4 follows in page order.
+    assert ids[0] == "data-structures"
+    ds_rows = result["results"][1:]
+    assert {row["document_name"] for row in ds_rows} == {"DS U4.pdf"}
+    assert [row["page_number"] for row in ds_rows] == [1, 2, 3, 4, 5, 6, 8, 9, 11]
+    assert all(row["metadata"]["subject"] == "Data Structures" for row in ds_rows)
+
+
+def test_default_top_k_still_limits_results():
+    result = _hybrid(AtlasFixtureDatabase(_ds_u4_chunks()), "Data Structures", top_k=5)
+
+    assert len(result["results"]) == 5
+
+
+def test_selection_keeps_document_diversity_before_backfilling():
+    rows = [
+        {"_id": f"a{i}", "document_id": "a", "content_hash": f"a{i}"} for i in range(5)
+    ] + [
+        {"_id": "b0", "document_id": "b", "content_hash": "b0"},
+        {"_id": "dup", "document_id": "c", "content_hash": "a0"},
+    ]
+
+    assert [r["_id"] for r in hybrid_search_module.select_results(rows, 4)] == [
+        "a0", "a1", "a2", "b0"
+    ]
+    assert [r["_id"] for r in hybrid_search_module.select_results(rows, 10)] == [
+        "a0", "a1", "a2", "b0", "a3", "a4"
+    ]
+
+
+def test_reading_order_groups_by_best_document_then_page():
+    rows = [
+        {"_id": 1, "document_id": "b", "page_number": 7},
+        {"_id": 2, "document_id": "a", "page_number": 3},
+        {"_id": 3, "document_id": "b", "page_number": 2},
+        {"_id": 4, "document_id": "a", "page_number": None, "chunk_index": 0},
+    ]
+
+    assert [r["_id"] for r in hybrid_search_module.order_for_reading(rows)] == [3, 1, 2, 4]
